@@ -2,80 +2,88 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 
-# --- 1. 页面配置 ---
+# --- 1. 页面基本配置 ---
 st.set_page_config(page_title="影像科管理系统", page_icon="🏥", layout="wide")
 
-# 从 Secrets 获取配置
-BASE_URL = st.secrets["public_gsheet_url"]
-# 建议在 Secrets 里新增一个 FORM_GID，或者直接写在这里
-MANUAL_GID = "0"          # 初始表格的 GID (通常是 0)
-FORM_GID = "720850282" # <--- 请把刚才记下的数字填在这里
+# --- 2. 配置信息（请根据你的实际情况修改这几项） ---
+# 建议你在 Streamlit Secrets 里设置了 public_gsheet_url
+BASE_URL = st.secrets.get("public_gsheet_url", "https://docs.google.com/spreadsheets/d/1RmSEy1RhqO69UadsYMATKoHDG0-ksO--ONu_jbiEuHU/edit?usp=sharing?embedded=true")
 
-@st.cache_data(ttl=60) # 录入后刷新网页即可看到，缓存设为 60 秒
-def get_merged_data():
+# 你的标签页 ID
+MANUAL_GID = "0"              # 手动填写的标签页 (通常是 0)
+FORM_GID = "720850282"  # <--- 请在此处填入那串长数字
+
+# 你的 Google 表单嵌入链接
+# 注意：结尾一定要带 ?embedded=true
+form_url = "https://docs.google.com/spreadsheets/d/1RmSEy1RhqO69UadsYMATKoHDG0-ksO--ONu_jbiEuHU/edit?usp=sharing?embedded=true"
+
+# --- 3. 数据读取函数 ---
 def fetch_sheet(gid):
-    # --- 注意：下面这几行都必须有缩进 ---
+    """从 Google Sheets 读取特定标签页并返回 DataFrame"""
     try:
-        # 1. 提取 Spreadsheet ID
+        # 提取 Spreadsheet ID 并构造 CSV 链接
         base_id = BASE_URL.split("/d/")[1].split("/")[0]
-        
-        # 2. 构造导出 CSV 的标准链接
         csv_url = f"https://docs.google.com/spreadsheets/d/{base_id}/export?format=csv&gid={gid}"
-        
-        # 3. 读取数据
+        # 读取数据，跳过损坏行
         return pd.read_csv(csv_url, on_bad_lines='skip')
     except Exception as e:
-        st.error(f"读取标签页 {gid} 出错: {e}")
+        st.error(f"读取标签页 {gid} 出错，请检查权限。错误: {e}")
         return pd.DataFrame()
 
-    # 1. 读取手动填写的旧数据
+@st.cache_data(ttl=60)
+def get_merged_data():
+    """合并手动数据和表单数据"""
     df_manual = fetch_sheet(MANUAL_GID)
-    # 2. 读取表单产生的新数据
     df_form = fetch_sheet(FORM_GID)
-
-    # --- 关键：数据清洗与合并 ---
-    # 表单数据第一列通常是"时间戳"，我们要跳过它，取后面的列
-    # 假设你的表单字段顺序和之前 Excel 顺序一致
-    if len(df_form.columns) > 8: 
-        # 去掉第一列时间戳，只保留后面的列
+    
+    # 定义标准列名
+    columns = ['日期', '常规_CT人', '常规_CT部位', '常规_DR人', '常规_DR部位', '查体_CT', '查体_DR', '查体_透视']
+    
+    # 清洗表单数据 (去掉第一列时间戳)
+    if not df_form.empty and len(df_form.columns) > 8:
         df_form = df_form.iloc[:, 1:]
     
-    # 统一列名，确保合并不会出错
-    columns = ['日期', '常规_CT人', '常规_CT部位', '常规_DR人', '常规_DR部位', '查体_CT', '查体_DR', '查体_透视']
-    df_manual.columns = columns
-    df_form.columns = columns
+    # 强制统一列名
+    if not df_manual.empty:
+        df_manual.columns = columns
+    if not df_form.empty:
+        df_form.columns = columns
+        
+    # 合并
+    combined = pd.concat([df_manual, df_form], ignore_index=True)
+    combined['日期'] = pd.to_datetime(combined['日期'], errors='coerce')
+    return combined.dropna(subset=['日期'])
 
-    # 合并两个表格
-    df_combined = pd.concat([df_manual, df_form], ignore_index=True)
-    df_combined['日期'] = pd.to_datetime(df_combined['日期'], errors='coerce')
-    return df_combined.dropna(subset=['日期'])
+# --- 4. 侧边栏导航 ---
+st.sidebar.title("👨‍⚕️ Andy 的管理后台")
+menu = st.sidebar.radio("功能切换", ["📊 查看业务报表", "📝 每日数据录入"])
 
-# --- 3. 侧边栏导航 ---
-st.sidebar.title("🛠️ 管理菜单")
-menu = st.sidebar.radio("请选择操作", ["📊 查看报表", "📝 数据录入"])
-
-if menu == "📝 数据录入":
+# --- 5. 逻辑实现 ---
+if menu == "📝 每日数据录入":
     st.header("📝 每日影像工作量上报")
-    st.info("提示：请在下方表单中填写今日数据，提交后将自动汇总至云端。")
-    # 替换成你创建的 Google 表单链接
-    form_url = "你的Google表单链接?embedded=true"
-    st.components.v1.iframe(form_url, height=900, scrolling=True)
+    st.markdown("---")
+    # 嵌入 Google 表单
+    st.components.v1.iframe(form_url, height=850, scrolling=True)
 
 else:
-    st.header("📊 影像科业务周报/月报")
+    st.header("📊 影像业务汇总看板")
+    st.markdown("---")
+    
     try:
         df = get_merged_data()
         
-        # 统计逻辑
+        # 计算周统计范围（上周五到本周四）
         now = datetime.now()
         offset = (3 - now.weekday())
         end_week = (now + timedelta(days=offset)).replace(hour=23, minute=59, second=59)
         start_week = (end_week - timedelta(days=6)).replace(hour=0, minute=0, second=0)
 
+        # 筛选数据
         mask = (df['日期'] >= start_week) & (df['日期'] <= end_week)
         week_data = df.loc[mask]
 
         if not week_data.empty:
+            # 求和计算
             ct_p = int(week_data['常规_CT人'].sum())
             ct_s = int(week_data['常规_CT部位'].sum())
             dr_p = int(week_data['常规_DR人'].sum())
@@ -84,25 +92,29 @@ else:
             pe_dr = int(week_data['查体_DR'].sum())
             pe_ts = int(week_data['查体_透视'].sum())
 
-            report_text = f"""{start_week.strftime('%Y年%m月%d日')}至{end_week.strftime('%Y年%m月%d日')}影像科工作量：
-CT：{ct_p}人，{ct_s}部位
-DR：{dr_p}人，{dr_s}部位
+            # 生成报表文本
+            report_text = f"{start_week.strftime('%Y年%m月%d日')}至{end_week.strftime('%Y年%m月%d日')}影像科工作量：\n" \
+                          f"CT：{ct_p}人，{ct_s}部位\n" \
+                          f"DR：{dr_p}人，{dr_s}部位\n\n" \
+                          f"查体：\n" \
+                          f"透视：{pe_ts}部位\n" \
+                          f"拍片: {pe_dr}部位\n" \
+                          f"CT: {pe_ct}部位"
 
-查体：
-透视：{pe_ts}部位
-拍片: {pe_dr}部位
-CT: {pe_ct}部位"""
+            # 界面展示
+            col1, col2, col3 = st.columns(3)
+            col1.metric("常规 CT 部位", ct_s)
+            col2.metric("常规 DR 部位", dr_s)
+            col3.metric("总查体量", pe_ct + pe_dr + pe_ts)
 
-            st.text_area("📋 报表文字（直接复制）", value=report_text, height=250)
+            st.subheader("📋 复制报表文字")
+            st.text_area("直接全选复制即可发送至微信群：", value=report_text, height=220)
             
-            # 展示汇总的小卡片，看起来更专业
-            c1, c2, c3 = st.columns(3)
-            c1.metric("本周 CT 总部位", ct_s)
-            c2.metric("本周 DR 总部位", dr_s)
-            c3.metric("本周查体总量", pe_ct + pe_dr + pe_ts)
-            
+            if st.button("🔄 立即刷新云端数据"):
+                st.cache_data.clear()
+                st.rerun()
         else:
-            st.warning("⚠️ 本周范围内暂无数据。")
+            st.warning("📅 本周统计范围内暂无数据，请确认员工是否已通过【数据录入】提交。")
 
     except Exception as e:
-        st.error(f"数据处理出错，请检查表格列名是否一致。错误: {e}")
+        st.error(f"⚠️ 统计失败，请确保表格和表单的字段顺序一致。详细错误: {e}")

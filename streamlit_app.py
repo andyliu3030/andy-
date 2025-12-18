@@ -32,12 +32,19 @@ def fetch_sheet(gid):
 
 @st.cache_data(ttl=60)
 def get_merged_data():
-    """合并手动数据和表单数据"""
-    df_manual = fetch_sheet(MANUAL_GID)
-    df_form = fetch_sheet(FORM_GID)
+    df_manual = fetch_sheet(MANUAL_GID) # 这是你的旧表
+    df_form = fetch_sheet(FORM_GID)     # 这是截屏里这个表
     
-    # 定义标准列名
-    columns = ['日期', '常规_CT人', '常规_CT部位', '常规_DR人', '常规_DR部位', '查体_CT', '查体_DR', '查体_透视']
+    # 核心修正：
+    # 如果是表单表，第一列是时间戳记，我们要丢掉它
+    if not df_form.empty:
+        # 只保留从第二列（日期）开始的数据
+        df_form = df_form.iloc[:, 1:] 
+        
+    # 定义标准列名（确保顺序和截屏中一致）
+    columns = ['日期', '常规CT人', '常规CT部位', '常规DR人', '常规DR部位', '查体CT', '查体DR', '查体透视']
+    
+    # ... 其余合并逻辑 ...
     
     # 清洗表单数据 (去掉第一列时间戳)
     if not df_form.empty and len(df_form.columns) > 8:

@@ -10,11 +10,32 @@ st.title("🏥 影像科工作量上报系统")
 # 在 Streamlit 部署时，我们会设置这部分的安全连接
 sheet_url = st.secrets["public_gsheet_url"]
 
-@st.cache_data(ttl=600) # 每 10 分钟缓存一次，减少读取压力
+@st.cache_data(ttl=600)
 def load_data(url):
-    # 将 Google Sheets 链接转换为 CSV 下载链接
-    csv_url = url.replace('/edit#gid=', '/export?format=csv&gid=')
-    return pd.read_csv(csv_url, skiprows=1)
+    # 更加强壮的 URL 转换逻辑
+    try:
+        if "/edit" in url:
+            base_url = url.split("/edit")[0]
+            # 获取 GID (工作表 ID)
+            import re
+            gid_match = re.search(r"gid=(\d+)", url)
+            gid = gid_match.group(1) if gid_match else "0"
+            csv_url = f"{base_url}/export?format=csv&gid={gid}"
+        else:
+            csv_url = url
+            
+        # 核心修复：不指定 skiprows，让 pandas 自动处理，或者手动指定列名
+        # header=0 表示第一行是表头
+        df = pd.read_csv(csv_url, header=0)
+        
+        # 如果你之前有空行或标题行，这里可以做一个清洗
+        # 确保第一列是日期格式，如果不是则丢弃该行
+        df = df[pd.to_datetime(df.iloc[:, 0], errors='coerce').notnull()]
+        
+        return df
+    except Exception as e:
+        st.error(f"解析 CSV 失败: {e}")
+        return pd.DataFrame()
 
 try:
     df = load_data(sheet_url)

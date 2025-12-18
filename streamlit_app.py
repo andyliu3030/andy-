@@ -14,17 +14,19 @@ FORM_GID = "720850282" # <--- 请把刚才记下的数字填在这里
 @st.cache_data(ttl=60) # 录入后刷新网页即可看到，缓存设为 60 秒
 def get_merged_data():
     def fetch_sheet(gid):
-    # 找到文件 ID 的核心部分
-    # 原始链接类似 https://docs.google.com/spreadsheets/d/ABCDEFG/edit#gid=0
-    base_id = BASE_URL.split("/d/")[1].split("/")[0]
-    # 构造最标准的 CSV 导出链接
-    csv_url = f"https://docs.google.com/spreadsheets/d/{base_id}/export?format=csv&gid={gid}"
-    
-    # 打印调试信息（你可以通过 Streamlit 云端的 Logs 查看这个链接对不对）
-    # st.write(f"正在尝试读取: {csv_url}") 
-    
-    # 使用 on_bad_lines 容错处理
-    return pd.read_csv(csv_url, on_bad_lines='skip')
+    # --- 注意：下面这几行都必须有缩进 ---
+    try:
+        # 1. 提取 Spreadsheet ID
+        base_id = BASE_URL.split("/d/")[1].split("/")[0]
+        
+        # 2. 构造导出 CSV 的标准链接
+        csv_url = f"https://docs.google.com/spreadsheets/d/{base_id}/export?format=csv&gid={gid}"
+        
+        # 3. 读取数据
+        return pd.read_csv(csv_url, on_bad_lines='skip')
+    except Exception as e:
+        st.error(f"读取标签页 {gid} 出错: {e}")
+        return pd.DataFrame()
 
     # 1. 读取手动填写的旧数据
     df_manual = fetch_sheet(MANUAL_GID)

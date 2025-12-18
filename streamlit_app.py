@@ -13,7 +13,7 @@ FORM_GID = "720850282" # <--- 请把刚才记下的数字填在这里
 
 @st.cache_data(ttl=60) # 录入后刷新网页即可看到，缓存设为 60 秒
 def get_merged_data():
-    def fetch_sheet(gid):
+def fetch_sheet(gid):
     # --- 注意：下面这几行都必须有缩进 ---
     try:
         # 1. 提取 Spreadsheet ID

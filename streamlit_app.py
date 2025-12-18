@@ -31,24 +31,38 @@ def fetch_sheet(gid):
 
 @st.cache_data(ttl=60)
 def get_merged_data():
+    """合并数据并实现：同日期自动覆盖（保留最后一次提交）"""
     df_manual = fetch_sheet(MANUAL_GID)
     df_form = fetch_sheet(FORM_GID)
     
     columns = ['日期', '常规CT人', '常规CT部位', '常规DR人', '常规DR部位', '查体CT', '查体DR', '查体透视']
     
+    # 1. 处理表单数据 (含时间戳)
     if not df_form.empty:
-        # 截屏显示：表单表第一列是时间戳，需要切掉
-        if len(df_form.columns) > 8:
-            df_form = df_form.iloc[:, 1:]
-        df_form.columns = columns
+        # 表单数据通常第一列是系统自动生成的“时间戳记”
+        # 我们利用这个时间戳来判断哪一个是“最新提交的”
+        df_form.columns = ['提交时间'] + columns
+        # 转换日期格式
+        df_form['日期'] = pd.to_datetime(df_form['日期'], errors='coerce').dt.normalize()
+        # 按照“提交时间”排序，确保最新的在最后
+        df_form = df_form.sort_values('提交时间')
+        # 只保留核心数据列，去掉时间戳
+        df_form = df_form[columns]
     
+    # 2. 处理手动数据
     if not df_manual.empty:
         df_manual.columns = columns
+        df_manual['日期'] = pd.to_datetime(df_manual['日期'], errors='coerce').dt.normalize()
         
+    # 3. 合并数据源
+    # 注意：我们将 df_form 放在后面，这样在去重时，表单数据会优先覆盖手动数据
     combined = pd.concat([df_manual, df_form], ignore_index=True)
     
-    # 关键点：强制转换为日期，并抹去具体时间，只保留年月日
-    combined['日期'] = pd.to_datetime(combined['日期'], errors='coerce').dt.normalize()
+    # --- 核心逻辑：去重覆盖 ---
+    # 根据“日期”列去重，keep='last' 表示如果有重复日期，保留列表中的最后一个（即最新的）
+    combined = combined.sort_values('日期') # 先按业务日期排序
+    combined = combined.drop_duplicates(subset=['日期'], keep='last')
+    
     return combined.dropna(subset=['日期'])
 
 # --- 4. 界面逻辑 ---
@@ -58,6 +72,7 @@ menu = st.sidebar.radio("请选择功能", ["📊 查看业务报表", "📝 每
 
 if menu == "📝 每日数据录入":
     st.header("📝 每日影像工作量上报")
+    st.info("💡 填错了吗？没关系，只需针对同一日期重新提交一份正确的数据，系统将自动覆盖旧数据。")
     st.components.v1.iframe(form_url, height=900, scrolling=True)
 
 else:
@@ -67,35 +82,18 @@ else:
     try:
         df = get_merged_data()
         
-        # --- 修正后的日期计算逻辑 ---
-        # 设定今天为基准，抹去时间
+        # 日期计算逻辑：上周五到本周四
         today = pd.Timestamp.now().normalize() 
-        # 找到最近的周四 (weekday: 0=Mon, 3=Thu, 6=Sun)
-        # 如果今天是周五(4)、周六(5)、周日(6)，周四在未来；如果今天是周一至周四，周四在今天或过去
-        days_to_thursday = (3 - today.weekday() + 7) % 7
-        if today.weekday() > 3: # 如果过了周四，则取本周四
-             end_week = today + pd.Timedelta(days=days_to_thursday)
-        else: # 如果在周四之前或当天，计算逻辑一致
-             end_week = today + pd.Timedelta(days=days_to_thursday)
-        
-        # 修正：Andy 的逻辑是统计【当前周期】。
-        # 如果今天是周四，end_week 就是今天；start_week 是上周五（6天前）
-        # 如果今天是周五，end_week 是下周四；start_week 是今天
         day_of_week = today.weekday()
+        
         if day_of_week == 4: # 今天是周五
             start_week = today
             end_week = today + pd.Timedelta(days=6)
         else: # 今天是周六至下周四
-            # 找到之前的那个周五
             days_since_friday = (today.weekday() - 4 + 7) % 7
             start_week = today - pd.Timedelta(days=days_since_friday)
             end_week = start_week + pd.Timedelta(days=6)
 
-        # 再次确保范围边界是纯日期
-        start_week = start_week.normalize()
-        end_week = end_week.normalize()
-
-        # 筛选：使用强制包含边界的方法
         mask = (df['日期'] >= start_week) & (df['日期'] <= end_week)
         week_data = df.loc[mask]
 
@@ -108,13 +106,13 @@ else:
             pe_dr = int(week_data['查体DR'].sum())
             pe_ts = int(week_data['查体透视'].sum())
 
-            # 核心卡片
-            c1, c2, c3 = st.columns(3)
-            c1.metric("常规 CT 部位", f"{ct_s}")
-            c2.metric("常规 DR 部位", f"{dr_s}")
-            c3.metric("总查体量", f"{pe_ct + pe_dr + pe_ts}")
+            # 核心卡片展示
+            col1, col2, col3 = st.columns(3)
+            col1.metric("常规 CT 部位", f"{ct_s}")
+            col2.metric("常规 DR 部位", f"{dr_s}")
+            col3.metric("总查体量", f"{pe_ct + pe_dr + pe_ts}")
 
-            st.subheader("📋 报表文字 (已包含上周五数据)")
+            st.subheader("📋 报表文字 (已启用唯一性覆盖)")
             report_text = f"{start_week.strftime('%Y年%m月%d日')}至{end_week.strftime('%Y年%m月%d日')}影像科工作量：\n" \
                           f"CT：{ct_p}人，{ct_s}部位\n" \
                           f"DR：{dr_p}人，{dr_s}部位\n\n" \
@@ -124,7 +122,7 @@ else:
                           f"CT: {pe_ct}部位"
             
             st.text_area("复制发至微信群：", value=report_text, height=220)
-            st.caption(f"当前统计周期：{start_week.date()} (周五) 00:00 到 {end_week.date()} (周四) 23:59")
+            st.caption(f"统计范围：{start_week.date()} 到 {end_week.date()} | 💡 如有重复日期，仅统计最新提交的一笔数据。")
         else:
             st.warning(f"📅 周期 {start_week.date()} 至 {end_week.date()} 暂无数据。")
 

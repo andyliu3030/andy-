@@ -11,7 +11,7 @@ BASE_URL = st.secrets.get("public_gsheet_url", "你的Google表格地址")
 
 # 你的标签页 ID
 MANUAL_GID = "1955581250"              # 手动填写的标签页 (通常是 0)
-FORM_GID = "720850282"  # <--- 请在此处填入那串长数字
+FORM_GID = "720850282#gid=720850282"  # <--- 请在此处填入那串长数字
 
 # 你的 Google 表单嵌入链接
 # 注意：结尾一定要带 ?embedded=true

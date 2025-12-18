@@ -7,7 +7,7 @@ st.set_page_config(page_title="影像科管理系统", page_icon="🏥", layout=
 
 # --- 2. 配置信息（请根据你的实际情况修改这几项） ---
 # 建议你在 Streamlit Secrets 里设置了 public_gsheet_url
-BASE_URL = st.secrets.get("public_gsheet_url", "https://docs.google.com/spreadsheets/d/1RmSEy1RhqO69UadsYMATKoHDG0-ksO--ONu_jbiEuHU/edit?usp=sharing")
+BASE_URL = st.secrets.get("public_gsheet_url", "你的Google表格地址")
 
 # 你的标签页 ID
 MANUAL_GID = "0"              # 手动填写的标签页 (通常是 0)

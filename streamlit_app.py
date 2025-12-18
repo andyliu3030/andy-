@@ -15,7 +15,7 @@ FORM_GID = "720850282"  # <--- 请在此处填入那串长数字
 
 # 你的 Google 表单嵌入链接
 # 注意：结尾一定要带 ?embedded=true
-form_url = "https://docs.google.com/spreadsheets/d/1RmSEy1RhqO69UadsYMATKoHDG0-ksO--ONu_jbiEuHU/edit?usp=sharing?embedded=true"
+form_url = "https://forms.gle/AzUyPeRgJnnAgEbj8?embedded=true"
 
 # --- 3. 数据读取函数 ---
 def fetch_sheet(gid):

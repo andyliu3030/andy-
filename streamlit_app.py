@@ -26,25 +26,49 @@ if not st.session_state["authenticated"]:
             st.session_state["authenticated"] = True
             st.rerun()
         else:
-            st.error("密码错误，请联系管理员")
+            st.error("密码错误")
     st.stop()
 
-# --- 4. 核心功能函数 ---
+# --- 4. 辅助功能：通用复制按钮 (JavaScript) ---
+def universal_copy_button(text, label="📋 点击一键复制"):
+    # 利用 HTML/JS 实现跨版本兼容的复制功能
+    html_code = f"""
+    <button onclick="copyText()" style="
+        background-color: #ff4b4b;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 8px;
+        cursor: pointer;
+        font-weight: bold;
+    ">{label}</button>
+    <textarea id="copyTarget" style="position:absolute; left:-9999px;">{text}</textarea>
+    <script>
+    function copyText() {{
+        var copyText = document.getElementById("copyTarget");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999);
+        document.execCommand("copy");
+        alert("✅ 已成功复制到剪贴板！");
+    }}
+    </script>
+    """
+    components.html(html_code, height=60)
 
+# --- 5. 核心数据获取 ---
 def fetch_sheet(gid):
     try:
         clean_url = BASE_URL.strip()
         base_id = clean_url.split("/d/")[1].split("/")[0]
         csv_url = f"https://docs.google.com/spreadsheets/d/{base_id}/export?format=csv&gid={gid}"
         return pd.read_csv(csv_url, on_bad_lines='skip')
-    except Exception as e:
+    except:
         return pd.DataFrame()
 
 @st.cache_data(ttl=30)
 def get_merged_data():
     df_manual = fetch_sheet(MANUAL_GID)
     df_form = fetch_sheet(FORM_GID)
-    
     columns = ['日期', '常规CT人', '常规CT部位', '常规DR人', '常规DR部位', '查体CT', '查体DR', '查体透视']
     
     if not df_form.empty:
@@ -58,122 +82,63 @@ def get_merged_data():
         df_manual['日期'] = pd.to_datetime(df_manual['日期'], errors='coerce').dt.normalize()
         
     combined = pd.concat([df_manual, df_form], ignore_index=True)
-    combined = combined.sort_values('日期')
-    combined = combined.drop_duplicates(subset=['日期'], keep='last')
+    combined = combined.sort_values('日期').drop_duplicates(subset=['日期'], keep='last')
     return combined.dropna(subset=['日期'])
 
-# --- 5. 导航与侧边栏 ---
+# --- 6. 界面实现 ---
 st.sidebar.title(f"👨‍⚕️ andy")
-if st.sidebar.button("退出登录"):
-    st.session_state["authenticated"] = False
-    st.rerun()
-
 menu = st.sidebar.radio("功能切换", ["📊 业务统计看板", "🔍 历史检查与修正", "📝 每日数据录入"])
-
 df = get_merged_data()
 
-# --- 6. 逻辑实现 ---
-
 if menu == "📝 每日数据录入":
-    st.header("📝 每日影像工作量上报")
     st.components.v1.iframe(form_url, height=850, scrolling=True)
 
 elif menu == "🔍 历史检查与修正":
     st.header("🔍 历史记录检查")
-    st.write("如需修改，直接在下方重新提交该日期的数据，系统会自动修正。")
-    display_df = df.sort_values('日期', ascending=False).head(15)
-    st.table(display_df)
+    st.table(df.sort_values('日期', ascending=False).head(15))
     st.markdown("---")
     st.subheader("🛠️ 极速数据修正")
     st.components.v1.iframe(form_url, height=600, scrolling=True)
 
 else:
-    st.header("📊 影像业务多维度看板")
-    tab_week, tab_month, tab_year = st.tabs(["📅 周报 (上个完整周期)", "📆 月报 (本月至今)", "🏆 年报 (全院大盘)"])
-    
+    st.header("📊 影像业务统计")
+    tab_week, tab_month, tab_year = st.tabs(["📅 周报", "📆 月报", "🏆 年报"])
     today = pd.Timestamp.now().normalize()
 
-    # --- 统一报表文字生成逻辑 ---
-    def generate_report_text(data, start_date, end_date):
-        if data.empty:
-            return "该时段暂无数据。"
-        
-        ct_p = int(data['常规CT人'].sum())
-        ct_s = int(data['常规CT部位'].sum())
-        dr_p = int(data['常规DR人'].sum())
-        dr_s = int(data['常规DR部位'].sum())
-        pe_ts = int(data['查体透视'].sum())
-        pe_dr = int(data['查体DR'].sum())
-        pe_ct = int(data['查体CT'].sum())
-        
-        return f"{start_date.strftime('%Y年%m月%d日')}至{end_date.strftime('%Y年%m月%d日')}影像科工作量：\n" \
-               f"CT：{ct_p}人，{ct_s}部位\n" \
-               f"DR：{dr_p}人，{dr_s}部位\n\n" \
-               f"查体：\n" \
-               f"透视：{pe_ts}部位\n" \
-               f"拍片: {pe_dr}部位\n" \
-               f"CT: {pe_ct}部位"
+    def gen_text(data, start, end):
+        if data.empty: return "暂无数据"
+        return f"{start.strftime('%Y年%m月%d日')}至{end.strftime('%Y年%m月%d日')}影像科工作量：\n" \
+               f"CT：{int(data['常规CT人'].sum())}人，{int(data['常规CT部位'].sum())}部位\n" \
+               f"DR：{int(data['常规DR人'].sum())}人，{int(data['常规DR部位'].sum())}部位\n\n" \
+               f"查体：\n透视：{int(data['查体透视'].sum())}部位\n拍片: {int(data['查体DR'].sum())}部位\nCT: {int(data['查体CT'].sum())}部位"
 
-    # --- 周报逻辑 (上个完整周期) ---
     with tab_week:
-        current_friday = today - pd.Timedelta(days=(today.weekday() - 4 + 7) % 7)
-        start_w = (current_friday - pd.Timedelta(days=7)).normalize()
-        end_w = (start_w + pd.Timedelta(days=6)).normalize()
-        
+        # 统计上一个完整周期（周五到周四）
+        current_fri = today - pd.Timedelta(days=(today.weekday() - 4 + 7) % 7)
+        start_w, end_w = current_fri - pd.Timedelta(days=7), current_fri - pd.Timedelta(days=1)
         week_df = df[(df['日期'] >= start_w) & (df['日期'] <= end_w)]
-        
-        st.subheader(f"📅 已完成周期汇总 ({start_w.date()} ~ {end_w.date()})")
-        
         if not week_df.empty:
-            c1, c2, c3 = st.columns(3)
-            c1.metric("上周常规 CT", f"{int(week_df['常规CT部位'].sum())}")
-            c2.metric("上周常规 DR", f"{int(week_df['常规DR部位'].sum())}")
-            c3.metric("上周查体总量", f"{int(week_df['查体CT'].sum() + week_df['查体DR'].sum() + week_df['查体透视'].sum())}")
-            
-            st.markdown("---")
-            st.subheader("📋 周报文本")
-            week_report = generate_report_text(week_df, start_w, end_w)
-            st.text_area("内容预览：", week_report, height=220)
-            
-            # --- 新增：一键复制按钮 ---
-            if st.button("📋 一键复制周报"):
-                st.copy_to_clipboard(week_report)
-                st.success("✅ 周报已成功复制到剪贴板！可直接粘贴至微信。")
-        else:
-            st.warning(f"⚠️ 周期 {start_w.date()} 至 {end_w.date()} 内暂无历史数据。")
+            report = gen_text(week_df, start_w, end_w)
+            st.text_area("周报预览", report, height=220)
+            universal_copy_button(report, "📋 一键复制周报")
+        else: st.warning("上周暂无数据")
 
-    # --- 月报逻辑 ---
     with tab_month:
-        month_start = today.replace(day=1)
-        month_df = df[(df['日期'] >= month_start) & (df['日期'] <= today)]
+        start_m = today.replace(day=1)
+        month_df = df[(df['日期'] >= start_m) & (df['日期'] <= today)]
         if not month_df.empty:
-            st.subheader(f"📆 {today.month} 月实时概览 (截至今日)")
-            st.bar_chart(month_df.set_index('日期')[['常规CT部位', '常规DR部位']])
-            
-            st.subheader("📋 月报文本")
-            month_report = generate_report_text(month_df, month_start, today)
-            st.text_area("内容预览：", month_report, height=220)
-            
-            # --- 新增：一键复制按钮 ---
-            if st.button("📋 一键复制月报"):
-                st.copy_to_clipboard(month_report)
-                st.success("✅ 月报已成功复制到剪贴板！")
-        else:
-            st.warning("本月暂无数据")
+            report = gen_text(month_df, start_m, today)
+            st.text_area("月报预览", report, height=220)
+            universal_copy_button(report, "📋 一键复制月报")
+        else: st.warning("本月暂无数据")
 
-    # --- 年报逻辑 ---
     with tab_year:
-        year_start = today.replace(month=1, day=1)
-        year_df = df[(df['日期'] >= year_start) & (df['日期'] <= today)]
+        start_y = today.replace(month=1, day=1)
+        year_df = df[(df['日期'] >= start_y) & (df['日期'] <= today)]
         if not year_df.empty:
-            st.subheader(f"🏆 {today.year} 年度汇总 (全院大盘)")
             st.info(f"年度累计完成：{int(year_df[['常规CT部位', '常规DR部位', '查体CT', '查体DR', '查体透视']].sum().sum())} 部位")
-            year_df['月'] = year_df['日期'].dt.month
-            monthly = year_df.groupby('月')[['常规CT部位', '常规DR部位']].sum()
-            st.line_chart(monthly)
-        else:
-            st.warning("本年暂无数据")
+            st.line_chart(year_df.groupby(year_df['日期'].dt.month)[['常规CT部位', '常规DR部位']].sum())
 
-if st.sidebar.button("🔄 立即同步云端数据"):
+if st.sidebar.button("🔄 同步云端"):
     st.cache_data.clear()
     st.rerun()

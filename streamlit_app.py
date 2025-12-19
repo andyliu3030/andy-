@@ -64,7 +64,7 @@ def fetch_sheet(gid):
     except:
         return pd.DataFrame()
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=86400)
 def get_merged_data():
     df_manual = fetch_sheet(MANUAL_GID)
     df_form = fetch_sheet(FORM_GID)

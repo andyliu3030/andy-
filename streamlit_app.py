@@ -114,11 +114,9 @@ else:
                f"拍片: {pe_dr}部位\n" \
                f"CT: {pe_ct}部位"
 
-    # --- 核心：周报逻辑 (永远显示上一个完整的周五到周四) ---
+    # --- 周报逻辑 (上个完整周期) ---
     with tab_week:
-        # 1. 先找到“当前所在周”的周五起点
         current_friday = today - pd.Timedelta(days=(today.weekday() - 4 + 7) % 7)
-        # 2. 回溯 7 天，找到“上个完整周期”的起点和终点
         start_w = (current_friday - pd.Timedelta(days=7)).normalize()
         end_w = (start_w + pd.Timedelta(days=6)).normalize()
         
@@ -133,12 +131,18 @@ else:
             c3.metric("上周查体总量", f"{int(week_df['查体CT'].sum() + week_df['查体DR'].sum() + week_df['查体透视'].sum())}")
             
             st.markdown("---")
-            st.subheader("📋 复制周报文字")
+            st.subheader("📋 周报文本")
             week_report = generate_report_text(week_df, start_w, end_w)
-            st.text_area("全选复制发送：", week_report, height=220)
+            st.text_area("内容预览：", week_report, height=220)
+            
+            # --- 新增：一键复制按钮 ---
+            if st.button("📋 一键复制周报"):
+                st.copy_to_clipboard(week_report)
+                st.success("✅ 周报已成功复制到剪贴板！可直接粘贴至微信。")
         else:
-            st.warning(f"⚠️ 周期 {start_w.date()} 至 {end_w.date()} 内暂无历史数据，请检查录入情况。")
+            st.warning(f"⚠️ 周期 {start_w.date()} 至 {end_w.date()} 内暂无历史数据。")
 
+    # --- 月报逻辑 ---
     with tab_month:
         month_start = today.replace(day=1)
         month_df = df[(df['日期'] >= month_start) & (df['日期'] <= today)]
@@ -146,12 +150,18 @@ else:
             st.subheader(f"📆 {today.month} 月实时概览 (截至今日)")
             st.bar_chart(month_df.set_index('日期')[['常规CT部位', '常规DR部位']])
             
-            st.subheader("📋 复制月报文字")
+            st.subheader("📋 月报文本")
             month_report = generate_report_text(month_df, month_start, today)
-            st.text_area("本月至今汇总：", month_report, height=220)
+            st.text_area("内容预览：", month_report, height=220)
+            
+            # --- 新增：一键复制按钮 ---
+            if st.button("📋 一键复制月报"):
+                st.copy_to_clipboard(month_report)
+                st.success("✅ 月报已成功复制到剪贴板！")
         else:
             st.warning("本月暂无数据")
 
+    # --- 年报逻辑 ---
     with tab_year:
         year_start = today.replace(month=1, day=1)
         year_df = df[(df['日期'] >= year_start) & (df['日期'] <= today)]

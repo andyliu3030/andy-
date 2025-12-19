@@ -1,18 +1,17 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import streamlit.components.v1 as components
 
 # --- 1. 页面基本配置 ---
 st.set_page_config(page_title="影像科管理系统", page_icon="🏥", layout="wide")
 
-# --- 2. 配置信息 (请在此处修改) ---
+# --- 2. 配置信息 ---
 BASE_URL = st.secrets.get("public_gsheet_url", "你的Google表格地址")
 MANUAL_GID = "1955581250"
 FORM_GID = "720850282"
 form_url = "https://forms.gle/AzUyPeRgJnnAgEbj8?embedded=true"
-
-# 安全设置：设置你的登录密码
-SYSTEM_PASSWORD = "666" # 你可以改成你喜欢的数字或字母
+SYSTEM_PASSWORD = "666" 
 
 # --- 3. 登录逻辑 ---
 if "authenticated" not in st.session_state:

@@ -5,7 +5,7 @@ from datetime import datetime
 from seatable_api import Base
 import streamlit.components.v1 as components
 
-# --- 1. 核心配置 (已整合 API Token) ---
+# --- 1. 核心配置 (Token 已锁定) ---
 SEATABLE_API_TOKEN = "18f698b812378e4d0a85de15f902fad1c205f393" 
 SEATABLE_SERVER_URL = "https://cloud.seatable.cn"
 TABLE_NAME = "业务数据录入" 
@@ -14,7 +14,7 @@ SYSTEM_PASSWORD = "666"
 
 st.set_page_config(page_title="影像科管理", page_icon="🏥", layout="wide", initial_sidebar_state="collapsed")
 
-# --- 2. UI 增强 (针对手机端深度定制) ---
+# --- 2. UI 增强样式 ---
 st.markdown("""
     <style>
     [data-testid="stWidgetLabel"] p { color: #1E3A8A !important; font-weight: bold !important; font-size: 1.05rem !important; }
@@ -71,12 +71,12 @@ def convert_df_to_excel(df):
         df.to_excel(writer, index=False, sheet_name='影像业务台账')
     return output.getvalue()
 
-# 🌟 调整：复制按钮改小，名称更新
+# 🌟 调整：复制按钮宽度减半
 def universal_copy_button(text, label="📋 一键复制内容"):
     safe_text = text.replace('\n', '\\n').replace("'", "\\'")
     html_code = f"""
     <button onclick="copyToClipboard()" style="
-        background-color:#ff4b4b;color:white;border:none;width:100%;height:42px;
+        background-color:#ff4b4b;color:white;border:none;width:50%;height:42px;
         border-radius:10px;cursor:pointer;font-weight:bold;font-size:16px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     ">{label}</button>
@@ -87,7 +87,7 @@ def universal_copy_button(text, label="📋 一键复制内容"):
         document.body.appendChild(textArea);
         textArea.select();
         document.execCommand('copy');
-        alert('✅ 内容已成功复制！');
+        alert('✅ 报表内容已成功复制！');
         document.body.removeChild(textArea);
     }}
     </script>
@@ -95,19 +95,19 @@ def universal_copy_button(text, label="📋 一键复制内容"):
     components.html(html_code, height=55)
 
 # --- 5. 侧边栏 ---
-menu = st.sidebar.radio("菜单", ["📊 统计看板", "📝 每日录入"])
+menu = st.sidebar.radio("菜单导航", ["📊 统计看板", "📝 每日录入"])
 df = get_seatable_data()
 
 # --- 6. 功能实现 ---
 if menu == "📝 每日录入":
-    st.header("📝 业务极速录入")
+    st.header("📝 业务数据录入")
     with st.form("mobile_form", clear_on_submit=True):
         st.markdown('<div class="section-box">', unsafe_allow_html=True)
-        d = st.date_input("📅 选择日期 (必填)", value=None)
+        d = st.date_input("📅 选择业务日期 (必填)", value=None)
         st.markdown('</div>', unsafe_allow_html=True)
         
         st.markdown('<div class="section-box">', unsafe_allow_html=True)
-        st.subheader("🏥 常规业务")
+        st.subheader("🏥 常规业务统计")
         c1, c2 = st.columns(2)
         ct_p = c1.number_input("常规 CT 人数", min_value=0, value=None, step=1)
         ct_s = c1.number_input("常规 CT 部位", min_value=0, value=None, step=1)
@@ -116,16 +116,16 @@ if menu == "📝 每日录入":
         st.markdown('</div>', unsafe_allow_html=True)
         
         st.markdown('<div class="section-box">', unsafe_allow_html=True)
-        st.subheader("🩺 查体业务")
+        st.subheader("🩺 查体业务统计")
         p1, p2, p3 = st.columns(3)
         pe_ct = p1.number_input("查体 CT", min_value=0, value=None)
         pe_dr = p2.number_input("查体 拍片", min_value=0, value=None)
         pe_ts = p3.number_input("查体 透视", min_value=0, value=None)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        if st.form_submit_button("🚀 提交业务数据"):
+        if st.form_submit_button("🚀 提交业务记录"):
             if d is None:
-                st.error("❌ 提交失败：请务必先选择日期！")
+                st.error("❌ 提交失败：请先选择日期！")
             else:
                 try:
                     base = Base(SEATABLE_API_TOKEN, SEATABLE_SERVER_URL)
@@ -144,22 +144,22 @@ if menu == "📝 每日录入":
                     st.success(f"✅ {d} 数据提交成功！")
                     st.cache_data.clear()
                     st.rerun()
-                except: st.error("网络连接异常，请检查 SeaTable 后台")
+                except: st.error("网络异常，请核对 SeaTable 设置")
 
 else:
-    st.header("📊 统计看板")
+    st.header("📊 业务统计看板")
     if not df.empty:
         today = pd.Timestamp.now().normalize()
         current_fri = today - pd.Timedelta(days=(today.weekday() - 4 + 7) % 7)
         sw, ew = current_fri - pd.Timedelta(days=7), current_fri - pd.Timedelta(days=1)
         w_df = df[(df['日期'] >= sw) & (df['日期'] <= ew)]
         
-        with st.expander("📑 导出中心"):
+        with st.expander("📑 原始数据管理"):
             excel_data = convert_df_to_excel(df)
-            st.download_button("📥 导出全量 Excel 报表", data=excel_data, file_name=f"影像数据_{datetime.now().strftime('%Y%m%d')}.xlsx")
+            st.download_button("📥 导出完整 Excel 报表", data=excel_data, file_name=f"影像数据_{datetime.now().strftime('%Y%m%d')}.xlsx")
 
         if not w_df.empty:
-            st.markdown(f'<div class="period-highlight">当前周期：{sw.date()} ~ {ew.date()}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="period-highlight">统计周期：{sw.date()} ~ {ew.date()}</div>', unsafe_allow_html=True)
             
             m1, m2 = st.columns(2)
             m1.metric("常规 CT 总部位", int(w_df['常规CT部位'].sum()))
@@ -170,18 +170,19 @@ else:
                      f"DR：{int(w_df['常规DR人'].sum())}人，{int(w_df['常规DR部位'].sum())}部位\\n\\n" \
                      f"查体：\\n透视：{int(w_df['查体透视'].sum())}部位\\n拍片: {int(w_df['查体拍片'].sum())}部位\\nCT: {int(w_df['查体CT'].sum())}部位"
             
+            # 🌟 调整：预览框高度翻倍
             with st.expander("📝 报表预览与复制", expanded=True):
-                st.text_area("文本预览", report.replace('\\n', '\n'), height=180)
+                st.text_area("报表原文", report.replace('\\n', '\n'), height=360) 
                 universal_copy_button(report)
         else:
-            st.warning("本周期暂无数据")
+            st.warning("当前统计周期内暂无录入记录")
         
         st.markdown("---")
-        if st.checkbox("查看库内记录"):
+        if st.checkbox("查看最新数据明细"):
             st.dataframe(df.head(7), use_container_width=True)
     else:
-        st.warning("暂无数据，请先前往录入。")
+        st.warning("库内目前没有数据。")
 
-if st.sidebar.button("🔄 强制同步刷新"):
+if st.sidebar.button("🔄 立即强制刷新同步"):
     st.cache_data.clear()
     st.rerun()

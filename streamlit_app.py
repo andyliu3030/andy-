@@ -9,7 +9,7 @@ st.set_page_config(page_title="影像科管理系统", page_icon="🏥", layout=
 
 # --- 2. 配置信息 (请在此修改) ---
 DATA_BRIDGE_URL = "https://data.huhu.de5.net" # 之前创建的 Cloudflare 数据中转站
-GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyXw9hPLJMcO9PJ05z9yV5dItNhLk9ZT0yOW8y7YGvPy9AP_jXlKLlq7PhJKBNuNzKOmg/exec" # ⚠️ 填入刚才部署的 Web 应用 URL
+GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwcrTFvhQkIPk0hr5ljTldbBBE0rnt7iInS7E-6oqujipWDHE-sol3PVVEZQaXsDMKJww/exec" # ⚠️ 填入刚才部署的 Web 应用 URL
 BASE_URL = st.secrets.get("public_gsheet_url", "https://docs.google.com/spreadsheets/d/1RmSEy1RhqO69UadsYMATKoHDG0-ksO--ONu_jbiEuHU/edit?gid=1955581250#gid=1955581250")
 
 MANUAL_GID = "1955581250"

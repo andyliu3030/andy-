@@ -20,7 +20,6 @@ if "authenticated" not in st.session_state:
 
 if not st.session_state["authenticated"]:
     st.title("🏥 影像科管理系统 - 身份验证")
-    # 这里也去掉了“主任”字样，更简洁
     pwd = st.text_input("请输入访问密码", type="password")
     if st.button("进入系统"):
         if pwd == SYSTEM_PASSWORD:
@@ -64,7 +63,6 @@ def get_merged_data():
     return combined.dropna(subset=['日期'])
 
 # --- 5. 导航与侧边栏 ---
-# 这里已经改成了您要求的：直接显示 andy
 st.sidebar.title(f"👨‍⚕️ andy")
 if st.sidebar.button("退出登录"):
     st.session_state["authenticated"] = False
@@ -83,10 +81,8 @@ if menu == "📝 每日数据录入":
 elif menu == "🔍 历史检查与修正":
     st.header("🔍 历史记录检查")
     st.write("如需修改，直接在下方重新提交该日期的数据，系统会自动修正。")
-    
     display_df = df.sort_values('日期', ascending=False).head(15)
     st.table(display_df)
-    
     st.markdown("---")
     st.subheader("🛠️ 极速数据修正")
     st.components.v1.iframe(form_url, height=600, scrolling=True)
@@ -97,6 +93,27 @@ else:
     
     today = pd.Timestamp.now().normalize()
 
+    # --- 统一报表文字生成逻辑 ---
+    def generate_report_text(data, start_date, end_date):
+        if data.empty:
+            return "该时段暂无数据。"
+        
+        ct_p = int(data['常规CT人'].sum())
+        ct_s = int(data['常规CT部位'].sum())
+        dr_p = int(data['常规DR人'].sum())
+        dr_s = int(data['常规DR部位'].sum())
+        pe_ts = int(data['查体透视'].sum())
+        pe_dr = int(data['查体DR'].sum())
+        pe_ct = int(data['查体CT'].sum())
+        
+        return f"{start_date.strftime('%Y年%m月%d日')}至{end_date.strftime('%Y年%m月%d日')}影像科工作量：\n" \
+               f"CT：{ct_p}人，{ct_s}部位\n" \
+               f"DR：{dr_p}人，{dr_s}部位\n\n" \
+               f"查体：\n" \
+               f"透视：{pe_ts}部位\n" \
+               f"拍片: {pe_dr}部位\n" \
+               f"CT: {pe_ct}部位"
+
     with tab_week:
         days_since_friday = (today.weekday() - 4 + 7) % 7
         start_w = today - pd.Timedelta(days=days_since_friday)
@@ -105,12 +122,13 @@ else:
         week_df = df[(df['日期'] >= start_w) & (df['日期'] <= end_w)]
         if not week_df.empty:
             c1, c2, c3 = st.columns(3)
-            c1.metric("本周 CT 部位", int(week_df['常规CT部位'].sum()))
-            c2.metric("本周 DR 部位", int(week_df['常规DR部位'].sum()))
-            c3.metric("总查体量", int(week_df['查体CT'].sum() + week_df['查体DR'].sum() + week_df['查体透视'].sum()))
+            c1.metric("本周常规 CT", f"{int(week_df['常规CT部位'].sum())} 部位")
+            c2.metric("本周常规 DR", f"{int(week_df['常规DR部位'].sum())} 部位")
+            c3.metric("本周查体总量", f"{int(week_df['查体CT'].sum() + week_df['查体DR'].sum() + week_df['查体透视'].sum())} 部位")
             
-            report = f"{start_w.date()}至{end_w.date()}工作量：\nCT：{int(week_df['常规CT人'].sum())}人，{int(week_df['常规CT部位'].sum())}部位\nDR：{int(week_df['常规DR人'].sum())}人，{int(week_df['常规DR部位'].sum())}部位\n查体：{int(week_df['查体CT'].sum() + week_df['查体DR'].sum() + week_df['查体透视'].sum())}部位"
-            st.text_area("全选复制周报", report, height=150)
+            st.subheader("📋 复制周报文字")
+            week_report = generate_report_text(week_df, start_w, end_w)
+            st.text_area("全选复制发送：", week_report, height=220)
         else:
             st.warning("本周暂无数据")
 
@@ -120,7 +138,10 @@ else:
         if not month_df.empty:
             st.subheader(f"📅 {today.month} 月统计概览")
             st.bar_chart(month_df.set_index('日期')[['常规CT部位', '常规DR部位']])
-            st.write(f"本月累计：{int(month_df[['常规CT部位', '常规DR部位', '查体CT', '查体DR', '查体透视']].sum().sum())} 部位")
+            
+            st.subheader("📋 复制月报文字")
+            month_report = generate_report_text(month_df, month_start, today)
+            st.text_area("本月至今汇总：", month_report, height=220)
         else:
             st.warning("本月暂无数据")
 
@@ -133,6 +154,8 @@ else:
             year_df['月'] = year_df['日期'].dt.month
             monthly = year_df.groupby('月')[['常规CT部位', '常规DR部位']].sum()
             st.line_chart(monthly)
+        else:
+            st.warning("本年暂无数据")
 
 if st.sidebar.button("🔄 立即同步云端数据"):
     st.cache_data.clear()
